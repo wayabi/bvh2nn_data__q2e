@@ -23,7 +23,8 @@ double get_rand()
 int viewer()
 {
 	BVH bvh;
-	bvh.load("./data/yzx");
+	//bvh.load("./data/yzx");
+	bvh.load("./data/zai");
 	//bvh.load("./data/01_01.bvh");
 	ROT2* r = ROT2::make_bone(&bvh);
 	r->update_pos();
@@ -140,11 +141,48 @@ int t4()
 	return 0;
 }
 
+//decompose y_rotation
+int t5()
+{
+	BVH bvh;
+	bvh.load("./data/01_01.bvh");
+	//bvh.load("./data/yzx");
+	//bvh.load("./data/zai");
+	ROT2* r = ROT2::make_bone(&bvh);
+	r->update_pos();
+	double resize0 = r->normalize_height();
+	double resize1 = 50;
+	r->multiply_len(resize1);
+	for(int i=0;i<100;++i){
+		vector<THR> data = ROT2::get_frame(bvh, i*10);
+		r->set_serialized_angle(data);
+		//r->p_ = THR(0, 0, 0);
+		double y_rot = 0;
+		//r->p_.print();
+		y_rot = r->except_y_rotation();
+		r->multiply_pos(resize0*resize1);
+		printf("y_rot = %f\n", y_rot);
+		r->update_pos();
+		//r->print();
+		char buf[80];
+		sprintf(buf, "./out/%03d.bmp", i);
+		//THR dest_camera = r->p_;
+		THR dest_camera(0, 0, 0);
+		Q q = qua::e2q(0, 0*i*M_PI/50, 0, qua::RotSeq::xyz);
+		THR pos_camera = THR(0, 35, 100);
+		pos_camera = THR(q*pos_camera.q()/q);
+		THR dir_camera = (dest_camera-pos_camera).normalize();
+		CamPol::simple_draw(r, buf, pos_camera, dir_camera);
+	}
+	delete(r);
+	return 0;
+}
 int main()
 {
 	srand(time(NULL));
 	//t4();
 	//for(int i=0;i<2000;++i)
-	viewer();
+	//viewer();
+	t5();
 	return 0;
 }
