@@ -23,14 +23,14 @@ double get_rand()
 int viewer()
 {
 	BVH bvh;
-	//bvh.load("./data/yzx");
-	bvh.load("./data/zai");
+	bvh.load("./data/yzx");
+	//bvh.load("./data/zai");
 	//bvh.load("./data/01_01.bvh");
 	ROT2* r = ROT2::make_bone(&bvh);
-	r->update_pos();
 	r->normalize_height();
 	r->multiply_len(80);
-	for(int i=0;i<20;++i){
+	r->update_pos();
+	for(int i=0;i<100;++i){
 		vector<THR> data = ROT2::get_frame(bvh, i*10);
 		r->set_serialized_angle(data);
 		r->update_pos();
@@ -38,10 +38,10 @@ int viewer()
 		char buf[80];
 		sprintf(buf, "./out/%03d.bmp", i);
 		//THR dest_camera = r->p_;
-		THR dest_camera(0, 0, 0);
+		THR dest_camera(0, 100, 0);
 		Q q = qua::e2q(0, i*M_PI/50, 0, qua::RotSeq::xyz);
-		THR pos_camera = THR(0, 35, -130);
-		pos_camera = THR(q*pos_camera.q()/q);
+		THR pos_camera = THR(160, 120, 0);
+		//pos_camera = THR(q*pos_camera.q()/q);
 		THR dir_camera = (dest_camera-pos_camera).normalize();
 		CamPol::simple_draw(r, buf, pos_camera, dir_camera);
 	}
@@ -177,12 +177,83 @@ int t5()
 	delete(r);
 	return 0;
 }
+
+//rots load
+int t6()
+{
+	BVH bvh;
+	//bvh.load("./data/01_01.bvh");
+	bvh.load("./data/yzx");
+	//bvh.load("./data/zai");
+	std::vector<ROT2*> rots;
+	std::vector<THR> pos_diff;
+	std::vector<double> y_rotation_diff;
+
+	THR init_pos(0, 0, 0);
+	double init_y_rotation = 0;
+	THR last_pos(0, 0, 0);
+	double last_y_rotation = 0;
+
+	int i=0;
+	for(auto ite = bvh.motion_.begin();ite != bvh.motion_.end();++ite, ++i){
+		ROT2* r = ROT2::make_bone(&bvh);
+		double resize0 = r->normalize_height();
+		r->update_pos();
+		vector<THR> data = ROT2::get_frame(bvh, i);
+		r->set_serialized_angle(data);
+		if(i==0){
+			init_pos = r->p_;
+			init_y_rotation = r->except_y_rotation();
+			printf("init_y_rotation = %f\n", init_y_rotation);
+			last_pos = init_pos;
+			last_y_rotation = init_y_rotation;
+		}
+		//r->p_ = (r->p_-init_pos)*resize0;
+		last_pos = r->p_;
+		//r->p_ = THR(q*r->p_.q()/q);
+		//r->p_ = THR(0, 0, 0);
+		double y_rotate = r->except_y_rotation();
+		Q q = qua::get_quaternion_from_axis(0, 1, 0, -y_rotate);
+		THR p2 = THR(q*r->p_.q()/q);
+		THR init_pos2 = THR(q*init_pos.q()/q);
+		r->p_ = (p2-init_pos2)*resize0;
+		pos_diff.push_back(r->p_);
+		y_rotate -= init_y_rotation;
+		y_rotation_diff.push_back(y_rotate-last_y_rotation);
+		last_y_rotation = y_rotate;
+
+		rots.push_back(r);
+	}
+
+	for(int i=0;i<rots.size();++i){
+		pos_diff.at(i).print();
+		printf("%f\n", y_rotation_diff.at(i));
+	}
+
+	for(int i=0;i<100;++i){
+		ROT2* r = rots.at(i*10);
+		r->update_pos();
+		char buf[80];
+		sprintf(buf, "./out/%03d.bmp", i);
+		//THR dest_camera = r->p_;
+		THR dest_camera(0, 0, 0);
+		THR pos_camera = THR(0, 1, 3);
+		//pos_camera = THR(q*pos_camera.q()/q);
+		THR dir_camera = (dest_camera-pos_camera).normalize();
+		CamPol::simple_draw(r, buf, pos_camera, dir_camera);
+	}
+
+	for(auto ite = rots.begin();ite != rots.end();++ite){
+		delete(*ite);
+	}
+	return 0;
+}
 int main()
 {
 	srand(time(NULL));
 	//t4();
 	//for(int i=0;i<2000;++i)
 	//viewer();
-	t5();
+	t6();
 	return 0;
 }
