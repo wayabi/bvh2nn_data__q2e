@@ -30,9 +30,15 @@ int viewer()
 	r->normalize_height();
 	r->multiply_len(80);
 	r->update_pos();
+	double rot_init = 0;
 	for(int i=0;i<100;++i){
 		vector<THR> data = ROT2::get_frame(bvh, i*10);
 		r->set_serialized_angle(data);
+		double rot = r->except_y_rotation();
+		if(i==0) rot_init = rot;
+		Q qq = qua::e2q(rot, 0, 0, qua::RotSeq::yxz);
+		r->q_al_cl_ = THR(qq*r->q_al_cl_.q());
+		printf("rot_=%f\n", rot-rot_init);
 		r->update_pos();
 		//r->print();
 		char buf[80];
@@ -187,12 +193,12 @@ int t6()
 	//bvh.load("./data/zai");
 	std::vector<ROT2*> rots;
 	std::vector<THR> pos_diff;
-	std::vector<double> y_rotation_diff;
+	std::vector<double> y_rot_diff;
 
 	THR init_pos(0, 0, 0);
-	double init_y_rotation = 0;
 	THR last_pos(0, 0, 0);
-	double last_y_rotation = 0;
+	double init_y_rot = 0;
+	double last_y_rot = 0;
 
 	int i=0;
 	for(auto ite = bvh.motion_.begin();ite != bvh.motion_.end();++ite, ++i){
@@ -201,37 +207,56 @@ int t6()
 		r->update_pos();
 		vector<THR> data = ROT2::get_frame(bvh, i);
 		r->set_serialized_angle(data);
+		double y_rot = 0;
+		y_rot = r->except_y_rotation();
 		if(i==0){
+			last_pos = r->p_;
 			init_pos = r->p_;
-			init_y_rotation = r->except_y_rotation();
-			printf("init_y_rotation = %f\n", init_y_rotation);
-			last_pos = init_pos;
-			last_y_rotation = init_y_rotation;
+			last_y_rot = y_rot;
+			init_y_rot = y_rot;
 		}
 		//r->p_ = (r->p_-init_pos)*resize0;
-		last_pos = r->p_;
 		//r->p_ = THR(q*r->p_.q()/q);
 		//r->p_ = THR(0, 0, 0);
-		double y_rotate = r->except_y_rotation();
-		Q q = qua::get_quaternion_from_axis(0, 1, 0, -y_rotate);
-		THR p2 = THR(q*r->p_.q()/q);
-		THR init_pos2 = THR(q*init_pos.q()/q);
-		r->p_ = (p2-init_pos2)*resize0;
-		pos_diff.push_back(r->p_);
-		y_rotate -= init_y_rotation;
-		y_rotation_diff.push_back(y_rotate-last_y_rotation);
-		last_y_rotation = y_rotate;
+		//Q q = qua::get_quaternion_from_axis(0, 1, 0, -y_rotate);
+		Q q = qua::e2q(-init_y_rot, 0, 0, qua::RotSeq::yxz);
+		//THR(q).print("q");
+		//THR p2 = THR(q*r->p_.q()/q);
+		//THR init_pos2 = THR(q*init_pos.q()/q);
+		//r->p_ = (p2-init_pos2)*resize0;
+		THR pos = (r->p_-last_pos)*resize0;
+		//THR pos = (r->p_-init_pos)*resize0;
+		pos = THR(q*pos.q()/q);
+		pos_diff.push_back(pos);
+		//THR temp = (r->p_-temp_init_pos)*resize0;
+		//temp = THR(q*temp.q()/q);
+		last_pos = r->p_;
+		r->p_ = THR(0, 0, 0);
+		//r->p_ = temp;
+		
+		y_rot_diff.push_back(y_rot-last_y_rot);
+		last_y_rot = y_rot;
 
 		rots.push_back(r);
 	}
 
 	for(int i=0;i<rots.size();++i){
-		pos_diff.at(i).print();
-		printf("%f\n", y_rotation_diff.at(i));
+		//pos_diff.at(i).print();
+		//printf("%f\n", y_rotation_diff.at(i));
 	}
 
+	THR pos_sum(0, 0, 0);
+	double rot_sum = 0;//init_y_rot;
 	for(int i=0;i<100;++i){
+		for(int j=0;j<10;++j){
+			if(i == 0) break;
+			pos_sum = pos_sum + pos_diff.at((i-1)*10+j);
+			rot_sum = rot_sum + y_rot_diff.at((i-1)*10+j);
+		}
 		ROT2* r = rots.at(i*10);
+		r->p_ = r->p_+pos_sum;
+		Q q = qua::e2q(rot_sum, 0, 0, qua::RotSeq::yxz);
+		r->q_al_cl_ = THR(q*r->q_al_cl_.q());
 		r->update_pos();
 		char buf[80];
 		sprintf(buf, "./out/%03d.bmp", i);
@@ -248,12 +273,41 @@ int t6()
 	}
 	return 0;
 }
+
+//decompose
+int t7()
+{
+	THR from1 = THR(get_rand()-0.5, get_rand()-0.5, get_rand()-0.5).normalize();
+	THR to1 = THR(get_rand()-0.5, get_rand()-0.5, get_rand()-0.5).normalize();
+	THR from2 = THR(get_rand()-0.5, get_rand()-0.5, get_rand()-0.5).normalize();
+	THR to2 = THR(get_rand()-0.5, get_rand()-0.5, get_rand()-0.5).normalize();
+	THR q11 = THR(qua::get_quaternion_from_vector(to1, from1));
+	THR q12 = THR(qua::get_quaternion_from_vector(to2, from2));
+	THR q = q11.q()*q12.q();
+
+	double v1 = 0;
+	double v2 = 0;
+	double v3 = 0;
+	qua::q2e(q.q(), v1, v2, v3, qua::RotSeq::yxz);
+	THR q2 = THR(qua::e2q(v1, 0, 0, qua::RotSeq::yxz));
+	THR q3 = THR(qua::e2q(0, v2, v3, qua::RotSeq::yxz));
+
+	//printf("1nearly_equal() = %d\n", q.nearly_equal(q3.q()*q2.q()));
+	bool flag = q.nearly_equal(q2.q()*q3.q());
+	printf("2nearly_equal() = %d\n", flag);
+	if(!flag){
+		q.print("q1");
+		THR(q2.q()*q3.q()).print("q2");
+	}
+	
+	return 0;
+}
 int main()
 {
 	srand(time(NULL));
 	//t4();
-	//for(int i=0;i<2000;++i)
-	//viewer();
+	//for(int i=0;i<100;++i)
 	t6();
+	//viewer();
 	return 0;
 }
