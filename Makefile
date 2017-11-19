@@ -6,8 +6,8 @@ else
   LDFLAGS =
 endif
 LIBS      = -lboost_system -lboost_thread -lboost_math_c99
-INCLUDE   = -I./include -I../r_smth/src -I../r_4/src
-MY_OBJECT = $(wildcard ../r_smth/obj/*.o) $(wildcard ../r_4/obj/*.o)
+INCLUDE   = -I./include -I../r_smth/src -I../r_4/src -I../Util
+MY_OBJECT = $(wildcard ../r_smth/obj/*.o) $(wildcard ../r_4/obj/*.o) $(wildcard ../Util/*.o)
 TARGET    = ./a.out
 SRCDIR    = ./src
 ifeq "$(strip $(SRCDIR))" ""
