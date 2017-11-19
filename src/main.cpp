@@ -412,9 +412,6 @@ int make_nn_input()
 	//bvh.load("./data/a");
 	bvh.load("./data/scene1.bvh");
 
-	for(auto ite = bvh.joints_.begin();ite != bvh.joints_.end();++ite){
-		//printf("%s\n", (*ite)->name_.c_str());
-	}
 	FILE* f_nn_input = NULL;
 	FILE* f_nn_output = NULL;
 	if((f_nn_input = fopen("f_nn_input.txt", "w")) == NULL){
@@ -435,9 +432,10 @@ int make_nn_input()
 	int frame_feature_max = frame_feature_stick.at(frame_feature_stick.size()-1);
 	double len_stick = 0.3;
 
+	int frame_skip = 15;
 	int frame_next = 0;
 	int frame_start = 0;
-	int frame_end = bvh.motion_.size();
+	int frame_end = bvh.motion_.size()/(frame_skip+1);
 	//int frame_end = 241;
 
 	vector<ROT2*> rots;
@@ -450,14 +448,15 @@ int make_nn_input()
 	double init_y_rot = 0;
 	double last_y_rot = 0;
 
+	int count_skip = 0;
 	int i=0;
-	for(auto ite = bvh.motion_.begin();ite != bvh.motion_.end();++ite, ++i){
-		ROT2* r = ROT2::make_bone(&bvh);
-
-		r->make_serialized_pointer();
-		for(auto ite2 = r->serialized_pointer_.begin();ite2 != r->serialized_pointer_.end();++ite2){
-			//printf("hoge:%s\n", (*ite2)->name_.c_str());
+	for(auto ite = bvh.motion_.begin();ite != bvh.motion_.end();++ite, ++i, ++count_skip){
+		if(count_skip >= frame_skip){
+			count_skip = 0;
+		}else{
+			continue;
 		}
+		ROT2* r = ROT2::make_bone(&bvh);
 		double resize0 = r->normalize_height();
 		r->update_pos();
 		vector<THR> data = ROT2::get_frame(bvh, i);
@@ -473,7 +472,7 @@ int make_nn_input()
 		//printf("y_extract(%f, %f, %f)\n", x, y, z);
 }
 
-		if(i==0){
+		if(rots.size() == 0){
 			last_pos = r->p_;
 			init_pos = r->p_;
 			last_y_rot = y_rot;
@@ -497,13 +496,13 @@ int make_nn_input()
 		rots.push_back(r);
 	}
 
-	//nn
+	//###nn
 	for(int i=frame_start;i<frame_end-frame_feature_max;++i){
 		for(int j=0;j<frame_feature_stick.size();++j){
 			int frame_feature = frame_feature_stick.at(j);
 			THR pos_sum(0, 0, 0);
 			double rot_sum = 0;
-			for(int k=i;k<i+frame_feature;++k){
+			for(int k=i;k<=i+frame_feature;++k){
 				pos_sum = pos_sum+pos_diff.at(k);
 				rot_sum = rot_sum+y_rot_diff.at(k);
 			}
@@ -526,8 +525,8 @@ int make_nn_input()
 			}
 			//for unity humanoid
 			int ii=0;
-			vector<THR> angle_output = rots.at(i+frame_next)->get_serialized_angle();
-			//vector<THR> angle_output = rots.at(i+frame_next)->get_serialized_angle_al_cw();
+			//vector<THR> angle_output = rots.at(i+frame_next)->get_serialized_angle();
+			vector<THR> angle_output = rots.at(i+frame_next)->get_serialized_angle_al_cw();
 			vector<THR> em_output;
 			for(auto ite = angle_output.begin();ite != angle_output.end();++ite, ++ii){
 				if(ite != angle_output.begin()){
@@ -561,7 +560,7 @@ int make_nn_input()
 			double y_root_input = y_root.at(i);
 			THR pos_output = THR(0, 0, 0);
 			double y_rot_output = 0;
-			for(int k=i;k<i+frame_next;++k){
+			for(int k=i;k<=i+frame_next;++k){
 				pos_output = pos_output+pos_diff.at(k);
 				y_rot_output = y_rot_output+y_rot_diff.at(k);
 			}
@@ -577,12 +576,12 @@ int make_nn_input()
 	THR pos_sum(0, 0, 0);
 	double rot_sum = 0;//init_y_rot;
 	for(int i=0;i<100;++i){
-		for(int j=0;j<10;++j){
+		for(int j=0;j<=frame_skip;++j){
 			if(i == 0) break;
-			pos_sum = pos_sum + pos_diff.at((i-1)*10+j);
-			rot_sum = rot_sum + y_rot_diff.at((i-1)*10+j);
+			pos_sum = pos_sum + pos_diff.at((i-1)*(frame_skip+1)+j);
+			rot_sum = rot_sum + y_rot_diff.at((i-1)*(frame_skip+1)+j);
 		}
-		ROT2* r = rots.at(i*10);
+		ROT2* r = rots.at(i);
 		r->p_ = r->p_+pos_sum;
 		Q q = qua::e2q(rot_sum, 0, 0, qua::RotSeq::yxz);
 		//r->q_al_cl_ = THR(q*r->q_al_cl_.q());
@@ -723,10 +722,13 @@ int t9()
 	double rot_init = 0;
 	auto data_all = load_em2data();
 	printf("size = %d\n", data_all.size());
+	THR pos_base(0, 0, 0);
 	for(int i=0;i<100;++i){
-		vector<THR> data = data_all.at(i*100);
+		vector<THR> data = data_all.at(i*1);
 		r->set_serialized_angle(data);
-		r->p_ = r->p_ * resize0*resize1;
+		//r->p_ = r->p_ * resize0*resize1;
+		pos_base = pos_base+THR(data.at(60))*resize1;
+		r->p_ = pos_base;
 		//r->p_ = THR(0, 0, 0);
 		double rot = 0;//r->except_y_rotation(r->search("Spine")->q_base_al_cl_.q());
 		{
@@ -754,7 +756,7 @@ int t9()
 		//THR dest_camera = r->p_;
 		THR dest_camera(0, 0, 0);
 		Q q = qua::e2q(0, i*M_PI/50, 0, qua::RotSeq::xyz);
-		THR pos_camera = THR(2, 0.4, 0);
+		THR pos_camera = THR(0, 0.4, 2);
 		//pos_camera = THR(q*pos_camera.q()/q);
 		THR dir_camera = (dest_camera-pos_camera).normalize();
 		CamPol::simple_draw(r, buf, pos_camera, dir_camera, NULL);
@@ -808,10 +810,10 @@ int main()
 	//t4();
 	//for(int i=0;i<100;++i)
 	//t8();
-	//make_nn_input();
+	make_nn_input();
 	//t_rotation_order();
 	//viewer();
-	t9();
+	//t9();
 	//tmp();
 	//t10();
 	return 0;
