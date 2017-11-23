@@ -34,7 +34,6 @@ int viewer()
 	double resize1 = 1.0;
 	r->multiply_len(resize1);
 	r->update_pos();
-	double rot_init = 0;
 	for(int i=0;i<100;++i){
 		vector<THR> data = ROT2::get_frame(bvh, i*50);
 		r->set_serialized_angle(data);
@@ -46,7 +45,6 @@ int viewer()
 			qua::q2e(r->q_al_cl_.q(), y, x, z, qua::RotSeq::yxz);
 			printf("except_y:%f, %f, %f\n", x, y, z);
 		}
-		if(i==0) rot_init = rot;
 		//Q qq = qua::e2q(rot, 0, 0, qua::RotSeq::yxz);
 		//r->q_al_cl_ = THR(qq*r->q_al_cl_.q());
 		//printf("rot_=%f\n", rot-rot_init);
@@ -207,7 +205,8 @@ int t6()
 	//bvh.load("./data/01_01.bvh");
 	//bvh.load("./data/yzx");
 	//bvh.load("./data/zai");
-	bvh.load("./data/a_4Char00.bvh");
+	//bvh.load("./data/a_4Char00.bvh");
+	bvh.load("./data/scene1.bvh");
 
 	std::vector<ROT2*> rots;
 	std::vector<THR> pos_diff;
@@ -262,24 +261,25 @@ int t6()
 		rots.push_back(r);
 	}
 
-	for(int i=0;i<rots.size();++i){
-		//pos_diff.at(i).print();
-		//printf("%f\n", y_rotation_diff.at(i));
-		//printf("y_root = %f\n", y_root.at(i));
-	}
-
 	THR pos_sum(0, 0, 0);
 	double rot_sum = 0;//init_y_rot;
+	int skip = 20;
 	for(int i=0;i<100;++i){
-		for(int j=0;j<10;++j){
+		for(int j=0;j<skip;++j){
 			if(i == 0) break;
-			pos_sum = pos_sum + pos_diff.at((i-1)*10+j);
-			rot_sum = rot_sum + y_rot_diff.at((i-1)*10+j);
+			pos_sum = pos_sum + pos_diff.at((i-1)*skip+j);
+			rot_sum = rot_sum + y_rot_diff.at((i-1)*skip+j);
 		}
-		ROT2* r = rots.at(i*10);
+		ROT2* r = rots.at(i*skip);
 		r->p_ = r->p_+pos_sum;
 		Q q = qua::e2q(rot_sum, 0, 0, qua::RotSeq::yxz);
 		r->q_al_cl_ = THR(q*r->q_al_cl_.q());
+
+		THR rot_root = r->q_al_cl_;
+		r->q_al_cl_ = THR(1, 0, 0, 0);
+		ROT2::refer_parent_angle(r);
+		r->q_al_cl_ = rot_root;
+
 		r->update_pos();
 		char buf[80];
 		sprintf(buf, "./out/%03d.bmp", i);
@@ -357,7 +357,6 @@ int t8()
 	double resize1 = 80;
 	r->multiply_len(resize1);
 	r->update_pos();
-	double rot_init = 0;
 	for(int i=0;i<100;++i){
 		vector<THR> data = ROT2::get_frame(bvh, i*100);
 		r->set_serialized_angle(data);
@@ -462,14 +461,13 @@ int make_nn_input()
 		vector<THR> data = ROT2::get_frame(bvh, i);
 		r->set_serialized_angle(data);
 		double y_rot = 0;
-		y_rot = 0;//r->except_y_rotation(r->search("Spine")->q_base_al_cl_.q());
-
+		y_rot = r->except_y_rotation(r->search("Spine")->q_base_al_cl_.q(), last_y_rot);
 {
 		double x = 0;
 		double y = 0;
 		double z = 0;
 		qua::q2e(r->q_al_cl_.q(), y, x, z, qua::RotSeq::yxz);
-		//printf("y_extract(%f, %f, %f)\n", x, y, z);
+		printf("y_extract(%f, %f, %f)\n", x, y, z);
 }
 
 		if(rots.size() == 0){
@@ -478,7 +476,7 @@ int make_nn_input()
 			last_y_rot = y_rot;
 			init_y_rot = y_rot;
 		}
-		Q q = qua::e2q(-init_y_rot, 0, 0, qua::RotSeq::yxz);
+		Q q = qua::e2q(-y_rot, 0, 0, qua::RotSeq::yxz);
 		THR pos = (r->p_-last_pos)*resize0;
 		pos = THR(q*pos.q()/q);
 		pos_diff.push_back(pos);
@@ -498,7 +496,7 @@ int make_nn_input()
 
 	//###nn
 	for(int i=frame_start;i<frame_end-frame_feature_max;++i){
-		for(int j=0;j<frame_feature_stick.size();++j){
+		for(int j=0;j<(int)frame_feature_stick.size();++j){
 			int frame_feature = frame_feature_stick.at(j);
 			THR pos_sum(0, 0, 0);
 			double rot_sum = 0;
@@ -564,8 +562,10 @@ int make_nn_input()
 				pos_output = pos_output+pos_diff.at(k);
 				y_rot_output = y_rot_output+y_rot_diff.at(k);
 			}
+			y_rot_output = qua::convert_single_pi(y_rot_output);
 
 			write_nn_input(f_nn_input, em_input, y_root_input, pos_stick_f, em_stick_f);
+			printf("aaa %f\n", y_rot_output);
 			write_nn_output(f_nn_output, em_output, pos_output, y_rot_output);
 			printf("%d,%d,%d\n", i, j, frame_feature);
 		}
@@ -689,9 +689,9 @@ vector<vector<THR> > load_em2data()
 		vector<THR> qq;
 		qq.push_back(THR(0, 0, 0));
 		for(int i=0;i<(ite->size()-4)/3;++i){
-			float x = atof(ite->at(i*3+0).c_str());
-			float y = atof(ite->at(i*3+1).c_str());
-			float z = atof(ite->at(i*3+2).c_str());
+			float x = (float)atof(ite->at(i*3+0).c_str());
+			float y = (float)atof(ite->at(i*3+1).c_str());
+			float z = (float)atof(ite->at(i*3+2).c_str());
 			THR t(x, y, z);
 			THR q = qua::em2q(t);
 			qq.push_back(q);
@@ -722,21 +722,19 @@ int t9()
 	double rot_init = 0;
 	auto data_all = load_em2data();
 	printf("size = %d\n", data_all.size());
-	THR pos_base(0, 0, 0);
+	THR pos(0, 0, 0);
 	for(int i=0;i<100;++i){
 		vector<THR> data = data_all.at(i*1);
 		r->set_serialized_angle(data);
-		//r->p_ = r->p_ * resize0*resize1;
-		pos_base = pos_base+THR(data.at(60))*resize1;
-		r->p_ = pos_base;
-		//r->p_ = THR(0, 0, 0);
-		double rot = 0;//r->except_y_rotation(r->search("Spine")->q_base_al_cl_.q());
+		double y_rot = data.at(60).w_;
+		Q q_y_rot = qua::e2q(-y_rot, 0, 0, qua::RotSeq::yxz);
+		pos = pos+THR(q_y_rot*THR(data.at(60)).q()/q_y_rot)*resize1;
+		r->p_ = pos;
 		{
 			double x, y, z;
 			qua::q2e(r->q_al_cl_.q(), y, x, z, qua::RotSeq::yxz);
 			printf("except_y:%f, %f, %f\n", x, y, z);
 		}
-		if(i==0) rot_init = rot;
 		//Q qq = qua::e2q(rot, 0, 0, qua::RotSeq::yxz);
 		//r->q_al_cl_ = THR(qq*r->q_al_cl_.q());
 		//printf("rot_=%f\n", rot-rot_init);
@@ -804,6 +802,107 @@ void t10()
 	printf("q_emb[x] = %.32f\n", q_emb.R_component_2());
 }
 
+//except_y_rot
+int t11()
+{
+	BVH bvh;
+	//bvh.load("./data/01_01.bvh");
+	//bvh.load("./data/yzx");
+	//bvh.load("./data/zai");
+	bvh.load("./data/a_4Char00.bvh");
+
+	std::vector<ROT2*> rots;
+	std::vector<THR> pos_diff;
+	std::vector<double> y_rot_diff;
+	std::vector<double> y_root;
+	THR init_pos(0, 0, 0);
+	THR last_pos(0, 0, 0);
+	double init_y_rot = 0;
+	double last_y_rot = 0;
+
+	vector<THR> qq1;
+	vector<THR> pos1;
+
+	int i=0;
+	for(auto ite = bvh.motion_.begin();ite != bvh.motion_.end();++ite, ++i){
+		ROT2* r = ROT2::make_bone(&bvh);
+		double resize0 = r->normalize_height();
+		r->update_pos();
+		vector<THR> data = ROT2::get_frame(bvh, i);
+		r->set_serialized_angle(data);
+		qq1.push_back(r->q_al_cl_);
+		double y_rot = 0;
+		y_rot = r->except_y_rotation(r->search("Spine")->q_base_al_cl_.q());
+		
+		if(i==0){
+			last_pos = r->p_;
+			init_pos = r->p_;
+			last_y_rot = 0;//y_rot;
+			init_y_rot = y_rot;
+		}
+		Q q = qua::e2q(-init_y_rot, 0, 0, qua::RotSeq::yxz);
+		THR pos = (r->p_-last_pos)*resize0;
+		pos1.push_back(pos);
+		pos = THR(q*pos.q()/q);
+		pos_diff.push_back(pos);
+		last_pos = r->p_;
+		r->p_ = THR(0, 0, 0);
+		r->update_pos();
+		vector<double> minmax = r->get_minmax_pos();
+		y_root.push_back(-minmax.at(2));
+		//printf("min=%f, max=%f\n", minmax.at(2), minmax.at(3));
+		//r->p_ = temp;
+		
+		y_rot_diff.push_back(y_rot-last_y_rot);
+		last_y_rot = y_rot;
+
+		rots.push_back(r);
+	}
+
+	//main logic
+	int ii = 0;
+	double y_rot_sum = 0;
+	for(auto ite = rots.begin();ite != rots.end();++ite, ++ii){
+		THR q = (*ite)->q_al_cl_;
+		double y_rot = y_rot_diff.at(ii);
+		y_rot_sum += y_rot;
+		Q q_y_rot = qua::e2q(y_rot_sum, 0, 0, qua::RotSeq::yxz);
+		THR tq = THR(q_y_rot*q.q());
+		THR qq = qq1.at(ii);
+		qq.print("qq");
+		tq.print("tq");
+		printf("q_error = %f\n", (qq-tq).get_size());
+		
+
+		THR pos = pos1.at(ii);
+
+		
+	}
+
+	for(auto ite = rots.begin();ite != rots.end();++ite){
+		delete(*ite);
+	}
+	return 0;
+}
+
+void t12()
+{
+	THR from = THR(get_rand()-0.5, get_rand()-0.5, get_rand()-0.5).normalize();
+	THR to = THR(get_rand()-0.5, get_rand()-0.5, get_rand()-0.5).normalize();
+	//from.print("from");
+	//to.print("to");
+	//printf("dot:%f\n", from.dot(to));
+	THR q1 = THR(qua::get_quaternion_from_vector(from, to));
+
+	double y_rot = get_rand()*M_PI*2-M_PI;
+	THR q2 = THR(qua::e2q(-y_rot, 0, 0, qua::RotSeq::yxz));
+	THR q3 = THR(q2.q()*q1.q());
+	THR q4 = THR(qua::e2q(y_rot, 0, 0, qua::RotSeq::yxz)*q3.q());
+	//q1.print("q1");
+	//q4.print("q4");
+	printf("error = %f\n", (q1-q4).get_size());
+}
+
 int main()
 {
 	srand(time(NULL));
@@ -811,10 +910,11 @@ int main()
 	//for(int i=0;i<100;++i)
 	//t8();
 	make_nn_input();
+	//t6();
 	//t_rotation_order();
 	//viewer();
 	//t9();
 	//tmp();
-	//t10();
+	//t11();
 	return 0;
 }
