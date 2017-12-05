@@ -424,17 +424,15 @@ int make_nn_input()
 	}
 
 	vector<int> frame_feature_stick;
-	//frame_feature_stick.push_back(0);
-	//frame_feature_stick.push_back(1);
+	frame_feature_stick.push_back(1);
 	frame_feature_stick.push_back(60);
 	frame_feature_stick.push_back(120);
-	frame_feature_stick.push_back(180);
 	frame_feature_stick.push_back(240);
 	int frame_feature_max = frame_feature_stick.at(frame_feature_stick.size()-1);
 	double len_stick = 0.3;
 
 	int frame_skip = 0;
-	int frame_next = 20;
+	int frame_next = 1;
 	int frame_start = 0;
 	int frame_end = bvh.motion_.size()/(frame_skip+1);
 	//int frame_end = 241;
