@@ -1459,7 +1459,7 @@ int make_nn_input_one()
 	vector<double> height_stick;
 	double len_stick = 0.01;
 
-	int frame_skip = 59;
+	int frame_skip = 9;
 	int frame_start = 0;
 	int frame_end = bvh.motion_.size()/(frame_skip+1);
 
@@ -1594,6 +1594,7 @@ int make_nn_input_one()
 			fprintf(f_nn_input, "%f,%f,%f,", t.x_, t.y_, t.z_);
 		}
 */
+
 		{
 			int ii=0;
 			for(auto ite2 = em_input.begin();ite2 != em_input.end();++ite2, ++ii){
@@ -1610,10 +1611,12 @@ int make_nn_input_one()
 		{
 			//Q q = qua::em2q(em_stick_previous.at(0));
 			Q q = rots.at(index_rots)->q_al_cl_.q();
-			THR t = THR(q*THR(0, 0, 1).q()/q);
+			THR t = THR(q*THR(0, 1, 0).q()/q);
 			double theta = asin(t.y_);
 			//t.print("t");
-			double height = height_stick_previous.at(0);
+			//double height = height_stick_previous.at(0);
+			ROT2* rr = rots.at(index_rots);
+			double height = rr->p_.y_ - rr->get_minmax_pos().at(2);
 			fprintf(f_nn_input, ",%f,%f\n", theta, height);
 
 			if(min_height > height) min_height = height;
@@ -1664,7 +1667,7 @@ int main()
 	//for(int i=0;i<100;++i)
 	//t8();
 	//make_nn_input_one();
-	make_nn_input();
+	make_nn_input_one();
 	//make_nn_input_v();
 	//t13();
 	//t6();

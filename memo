@@ -1,0 +1,26 @@
+#nn_traj frame_previous=12
+##input
+11*3 pos_stick
+12*3 em_stick
+12*1 height_stick
+47*3 v_part
+59*3 em_part
+
+33+36+12+141+177=399
+
+##output
+59*3 em_part
+3 pos_diff
+1 rot_y_diff
+181
+
+#nn_one
+##input
+48*3 v_part with hip
+58*3 em_part without hip
+1 horizontal angle stick
+1 height stick
+144+174+2=320
+##output
+58*3 em_part
+174
